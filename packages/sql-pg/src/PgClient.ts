@@ -21,6 +21,7 @@ import * as RcRef from "effect/RcRef"
 import * as Redacted from "effect/Redacted"
 import * as Scope from "effect/Scope"
 import * as Stream from "effect/Stream"
+import type * as NodeStream from "node:stream"
 import type { ConnectionOptions } from "node:tls"
 import * as Pg from "pg"
 import Cursor from "pg-cursor"
@@ -74,6 +75,29 @@ export interface PgClientConfig {
   readonly database?: string | undefined
   readonly username?: string | undefined
   readonly password?: Redacted.Redacted | undefined
+
+  /**
+   * A function returning a custom socket to use. This parameter is not documented
+   * in the postgres.js's type signature. See their
+   * [readme](https://github.com/porsager/postgres?tab=readme-ov-file#connection-details) instead.
+   *
+   * @example
+   * ```ts
+   * import { AuthTypes, Connector } from "@google-cloud/cloud-sql-connector";
+   * import { PgClient } from "@effect/sql-pg";
+   * import { Config, Effect, Layer } from "effect"
+   *
+   * const layer = Effect.gen(function*() {
+   *   const connector = new Connector();
+   *   const clientOpts = yield* Effect.promise(() => connector.getOptions({
+   *     instanceConnectionName: "project:region:instance",
+   *     authType: AuthTypes.IAM,
+   *   }));
+   *   return PgClient.layer({ socket: clientOpts.stream, username: "iam-user" });
+   * }).pipe(Layer.unwrapEffect)
+   * ```
+   */
+  readonly socket?: (() => NodeStream.Duplex) | undefined
 
   readonly idleTimeout?: Duration.DurationInput | undefined
   readonly connectTimeout?: Duration.DurationInput | undefined
@@ -130,7 +154,8 @@ export const make = (
         ? Duration.toSeconds(options.connectionTTL)
         : undefined,
       application_name: options.applicationName ?? "@effect/sql-pg",
-      types: options.types
+      types: options.types,
+      socket: options.socket
     })
 
     pool.on("error", (_err) => {
